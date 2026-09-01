@@ -1,0 +1,43 @@
+{
+  "name": "agora-v2-backend",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p .",
+    "start": "node dist/server.js",
+    "db:init": "tsx src/db/init.ts",
+    "seed": "tsx src/curriculum/curriculumLoader.ts",
+    "lti:keys": "tsx src/lti/keys.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.3",
+    "@google/genai": "^2.20.0",
+    "@google/generative-ai": "^0.21.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jose": "^5.9.3",
+    "mammoth": "^1.8.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.12.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.14.9",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.11.6",
+    "@types/uuid": "^9.0.8",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
