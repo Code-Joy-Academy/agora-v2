@@ -48,6 +48,7 @@ export interface LiveState {
 export interface FrictionAlert {
   id: string;
   student_id: string;
+  student_name:string;
   display_name: string;
   node_title: string;
   reason: string;
@@ -67,4 +68,42 @@ export interface ScaffoldRules {
   friction_threshold_hints: number;
   mastery_advance_threshold: number;
   pedagogy_directness: number;
+}
+
+export interface CurriculumNode {
+  id: string;
+  pack_id: string;
+  strand: string;
+  title: string;
+  description: string;
+  sample_passage: string | null;
+  order_index: number;
+  p_mastery?: number;
+}
+
+export interface MasteryState {
+  student_id: string;
+  node_id: string;
+  course_id: string;
+  p_mastery: number;
+  correct_count: number;
+  incorrect_count: number;
+  hint_count: number;
+  consecutive_successes: number;
+  time_on_task_seconds: number;
+  last_misconception: string | null;
+}
+
+export interface TurnResponse {
+  state: MasteryState;
+  scaffold_level: number;
+  message: string;
+}
+
+export interface SessionContext {
+  id: string;
+  display_name: string;
+  role: 'Teacher' | 'Student';
+  course_id: string;
+  class_code: string;
 }
