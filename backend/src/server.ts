@@ -18,8 +18,8 @@ import { initWsHub } from './ws/hub.js';
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true })); // LTI id_token form_post
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true })); // LTI id_token form_post
 
 app.use('/api', loginRouter);
 app.use('/api', launchRouter);
