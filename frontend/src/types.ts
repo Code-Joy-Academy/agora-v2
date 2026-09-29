@@ -1,5 +1,12 @@
 export type Role = 'Teacher' | 'Student';
 export type MasteryLabel = 'New' | 'Exploring' | 'Familiar' | 'Mastered';
+export type ScaffoldLevel = 0 | 1 | 2 | 3 | 4;
+
+export interface TurnResponse {
+  state: MasteryState;
+  scaffold_level: ScaffoldLevel;
+  message: string;
+}
 
 export interface SessionUser {
   id: string;
@@ -96,7 +103,7 @@ export interface MasteryState {
 
 export interface TurnResponse {
   state: MasteryState;
-  scaffold_level: number;
+  scaffold_level: ScaffoldLevel;
   message: string;
 }
 
@@ -106,4 +113,32 @@ export interface SessionContext {
   role: 'Teacher' | 'Student';
   course_id: string;
   class_code: string;
+}
+
+export interface DocumentIngestionResult {
+  document_id: string;
+  chunk_count: number;
+  embedded: boolean;
+}
+export interface DocumentRow {
+  id: string;
+  title: string;
+  resource_type: string;
+  node_id: string | null;
+  created_at: string;
+}
+
+export interface Course {
+  id: string;
+  title: string;
+  curriculum_pack_id: string;
+  scaffold_rules: ScaffoldRules;
+}
+
+export interface StartSessionResponse {
+  session_id: string;
+  node: CurriculumNode;
+  question: string;
+  question_id: string;
+  state: MasteryState;
 }

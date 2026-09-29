@@ -1,11 +1,14 @@
 import type {
+  Course,
   CurriculumNode,
+  DocumentIngestionResult,
   DocumentRow,
   FrictionAlert,
   HeatmapCell,
   KnowledgeNode,
   LiveState,
   SessionContext,
+  StartSessionResponse,
   TurnResponse,
 } from './types';
 
@@ -37,102 +40,67 @@ async function req<T = unknown>(
 }
 
 export const api = {
-  // ----------------------------------------------------------
-  // Auth & LTI Launch Handshake
-  // ----------------------------------------------------------
-
-  exchangeLaunchCode: (
-    code: string,
-  ): Promise<SessionContext> =>
-    req<SessionContext>(
-      '/api/session/exchange',
-      {
-        method: 'POST',
-        body: JSON.stringify({ code }),
-      },
-    ),
+  exchangeLaunchCode: (code: string): Promise<SessionContext> =>
+    req<SessionContext>('/api/session/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
 
   simulateLaunchUrl: (
     role: string,
     name: string,
     course: string,
-    class_code: string,
+    class_code: string
   ) =>
-    `${BASE}/api/lti/mock-platform/simulate-launch?${new URLSearchParams(
-      {
-        role,
-        name,
-        course,
-        class_code,
-      },
-    )}`,
+    `${BASE}/api/lti/mock-platform/simulate-launch?${new URLSearchParams({
+      role,
+      name,
+      course,
+      class_code,
+    })}`,
 
   getDemoContext: (): Promise<SessionContext> =>
     req<SessionContext>('/api/auth/demo'),
 
-  // ----------------------------------------------------------
-  // Curriculum Frameworks & Knowledge Realm
-  // ----------------------------------------------------------
+  getPacks: () =>
+    req('/api/packs'),
 
-  getPacks: (): Promise<unknown[]> =>
-    req<unknown[]>('/api/packs'),
+  setCourseCurriculum: (courseId: string, packId: string) =>
+    req(`/api/courses/${courseId}/curriculum`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        curriculum_pack_id: packId,
+      }),
+    }),
 
-  setCourseCurriculum: (
+  knowledgeMap: (
     courseId: string,
-    packId: string,
-  ) =>
-    req<unknown>(
-      `/api/courses/${courseId}/curriculum`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({
-          curriculum_pack_id: packId,
-        }),
-      },
+    studentId: string,
+    packId?: string
+  ): Promise<KnowledgeNode[]> =>
+    req<KnowledgeNode[]>(
+      `/api/courses/${courseId}/knowledge-map?student_id=${encodeURIComponent(
+        studentId
+      )}${packId ? `&pack_id=${encodeURIComponent(packId)}` : ''}`
     ),
 
   getKnowledgeMap: (
     courseId: string,
     studentId: string,
-    packId?: string,
-  ): Promise<CurriculumNode[]> =>
-    req<CurriculumNode[]>(
-      `/api/courses/${courseId}/knowledge-map?student_id=${studentId}${
-        packId
-          ? `&pack_id=${packId}`
-          : ''
-      }`,
-    ),
-
-  knowledgeMap: (
-    courseId: string,
-    studentId: string,
-    packId?: string,
+    packId?: string
   ): Promise<KnowledgeNode[]> =>
     req<KnowledgeNode[]>(
-      `/api/courses/${courseId}/knowledge-map?student_id=${studentId}${
-        packId
-          ? `&pack_id=${packId}`
-          : ''
-      }`,
+      `/api/courses/${courseId}/knowledge-map?student_id=${encodeURIComponent(
+        studentId
+      )}${packId ? `&pack_id=${encodeURIComponent(packId)}` : ''}`
     ),
-
-  // ----------------------------------------------------------
-  // Socratic Learning & Session Turns
-  // ----------------------------------------------------------
 
   startSession: (
     student_id: string,
     course_id: string,
-    node_id: string,
-  ): Promise<{
-    session_id: string;
-    question: string;
-  }> =>
-    req<{
-      session_id: string;
-      question: string;
-    }>('/api/sessions', {
+    node_id: string
+  ): Promise<StartSessionResponse> =>
+    req<StartSessionResponse>('/api/sessions', {
       method: 'POST',
       body: JSON.stringify({
         student_id,
@@ -154,147 +122,105 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify(data),
-      },
+      }
     ),
 
   postTurn: (
     sessionId: string,
-    body: {
-      student_id: string;
-      course_id: string;
-      node_id: string;
-      question: string;
-      studentAttempt: string;
-      secondsSpent: number;
-    },
+    body: object
   ): Promise<TurnResponse> =>
     req<TurnResponse>(
       `/api/sessions/${sessionId}/turns`,
       {
         method: 'POST',
         body: JSON.stringify(body),
-      },
+      }
     ),
 
-  askExploratory: (body: {
-    course_id: string;
-    node_id: string | null;
-    studentQuery: string;
-  }): Promise<{
-    answer: string;
-  }> =>
-    req<{
-      answer: string;
-    }>('/api/exploratory', {
+  askExploratory: (
+    body: object
+  ): Promise<{ answer: string }> =>
+    req<{ answer: string }>('/api/exploratory', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 
-  // ----------------------------------------------------------
-  // Teacher Telemetry & Alerts
-  // ----------------------------------------------------------
-
-  course: (
-    courseId: string,
-  ): Promise<unknown> =>
-    req<unknown>(
-      `/api/courses/${courseId}`,
-    ),
+  course: (courseId: string): Promise<Course> =>
+    req<Course>(`/api/courses/${courseId}`),
 
   updateRules: (
     courseId: string,
-    scaffold_rules: object,
-  ): Promise<unknown> =>
-    req<unknown>(
-      `/api/courses/${courseId}/rules`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({
-          scaffold_rules,
-        }),
-      },
-    ),
+    scaffold_rules: object
+  ) =>
+    req(`/api/courses/${courseId}/rules`, {
+      method: 'PATCH',
+      body: JSON.stringify({ scaffold_rules }),
+    }),
 
   heatmap: (
-    courseId: string,
+    courseId: string
   ): Promise<HeatmapCell[]> =>
     req<HeatmapCell[]>(
-      `/api/courses/${courseId}/heatmap`,
+      `/api/courses/${courseId}/heatmap`
     ),
 
   liveStates: (
-    courseId: string,
+    courseId: string
   ): Promise<LiveState[]> =>
     req<LiveState[]>(
-      `/api/courses/${courseId}/live-states`,
+      `/api/courses/${courseId}/live-states`
     ),
 
   getAlerts: (
-    courseId: string,
+    courseId: string
   ): Promise<FrictionAlert[]> =>
     req<FrictionAlert[]>(
-      `/api/courses/${courseId}/alerts`,
+      `/api/courses/${courseId}/alerts`
     ),
 
   alerts: (
-    courseId: string,
+    courseId: string
   ): Promise<FrictionAlert[]> =>
     req<FrictionAlert[]>(
-      `/api/courses/${courseId}/alerts`,
+      `/api/courses/${courseId}/alerts`
     ),
 
-  resolveAlert: (
-    id: string,
-  ): Promise<unknown> =>
-    req<unknown>(
-      `/api/alerts/${id}/resolve`,
-      {
-        method: 'POST',
-      },
-    ),
+  resolveAlert: (id: string) =>
+    req(`/api/alerts/${id}/resolve`, {
+      method: 'POST',
+    }),
 
-  agsLog: (
-    courseId: string,
-  ): Promise<unknown> =>
-    req<unknown>(
-      `/api/courses/${courseId}/ags-log`,
-    ),
-
-  // ----------------------------------------------------------
-  // Document RAG Ingestion
-  // ----------------------------------------------------------
+  agsLog: (courseId: string) =>
+    req(`/api/courses/${courseId}/ags-log`),
 
   documents: (
-    courseId: string,
+    courseId: string
   ): Promise<DocumentRow[]> =>
     req<DocumentRow[]>(
-      `/api/courses/${courseId}/documents`,
+      `/api/courses/${courseId}/documents`
     ),
 
   uploadDocument: (
     courseId: string,
     file: File,
-    resource_type: string = 'notes',
-    node_id?: string,
-  ): Promise<DocumentRow> => {
+    resource_type = 'notes',
+    node_id?: string
+  ): Promise<DocumentIngestionResult> => {
     const form = new FormData();
 
     form.append('file', file);
-    form.append(
-      'resource_type',
-      resource_type,
-    );
+    form.append('resource_type', resource_type);
 
     if (node_id) {
       form.append('node_id', node_id);
     }
 
-    return req<DocumentRow>(
+    return req<DocumentIngestionResult>(
       `/api/courses/${courseId}/documents`,
       {
         method: 'POST',
         body: form,
-      },
+      }
     );
   },
 };
