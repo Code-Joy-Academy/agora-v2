@@ -11,7 +11,7 @@ export const config = {
 
   corsOrigins:
     process.env.CORS_ORIGINS ??
-    'http://localhost:3000,http://localhost:5173',
+    'http://localhost:3000, http://localhost:5173',
 
   enableMockPlatform:
     process.env.ENABLE_MOCK_PLATFORM === 'true',
