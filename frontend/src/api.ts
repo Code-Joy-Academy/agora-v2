@@ -16,6 +16,10 @@ const BASE =
   import.meta.env.VITE_API_URL ??
   'http://localhost:4000';
 
+const WS_BASE =
+  import.meta.env.VITE_WS_URL ??
+  BASE.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:') + '/ws';
+
 async function req<T = unknown>(
   path: string,
   opts: RequestInit = {},
@@ -224,7 +228,3 @@ export const api = {
     );
   },
 };
-
-export const WS_BASE =
-  (import.meta.env.VITE_WS_URL ??
-    'ws://localhost:4000') + '/ws';

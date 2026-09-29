@@ -4,84 +4,106 @@ import { TopNavBar } from './components/shared/TopNavBar';
 import { StudentJourney } from './components/student/StudentJourney';
 import { PracticeRoom } from './components/student/PracticeRoom';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
-import type { CurriculumNode, SessionContext } from './types';
-
-interface CourseState {
-  id: string;
-  title: string;
-  curriculum_pack_id: string;
-}
+import type {
+  Course,
+  CurriculumNode,
+  SessionContext,
+} from './types';
 
 interface DemoContextResponse {
-  course: CourseState;
+  course: Course;
   student: SessionContext;
   teacher: SessionContext;
 }
 
 export function App() {
   const [role, setRole] = useState<'Student' | 'Teacher'>('Student');
-  const [activeView, setActiveView] = useState<'journey' | 'practice' | 'dashboard'>('journey');
-  const [course, setCourse] = useState<CourseState | null>(null);
+  const [activeView, setActiveView] = useState<
+    'journey' | 'practice' | 'dashboard'
+  >('journey');
+
+  const [course, setCourse] = useState<Course | null>(null);
   const [user, setUser] = useState<SessionContext | null>(null);
   const [nodes, setNodes] = useState<CurriculumNode[]>([]);
-  const [selectedNode, setSelectedNode] = useState<CurriculumNode | null>(null);
+  const [selectedNode, setSelectedNode] =
+    useState<CurriculumNode | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load nodes for a specific pack or the current course pack
-  const loadNodes = useCallback(async (courseId: string, studentId: string, packId?: string) => {
-    try {
-      const nodeList = await api.getKnowledgeMap(courseId, studentId, packId);
-      setNodes(nodeList);
-      if (nodeList.length > 0) {
-        setSelectedNode(nodeList[0]);
+  const loadNodes = useCallback(
+    async (courseId: string, studentId: string, packId?: string) => {
+      try {
+        const nodeList = await api.getKnowledgeMap(
+          courseId,
+          studentId,
+          packId
+        );
+
+        setNodes(nodeList);
+
+        if (nodeList.length > 0) {
+          setSelectedNode(nodeList[0]);
+        } else {
+          setSelectedNode(null);
+        }
+      } catch (err) {
+        console.error('Failed to fetch knowledge map:', err);
       }
-    } catch (err) {
-      console.error('Failed to fetch knowledge map:', err);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const launchCode = urlParams.get('launch');
 
-    if (launchCode) {
-      // 1. LMS Launch Path
-      api.exchangeLaunchCode(launchCode)
-        .then(async (sessionUser) => {
-          window.history.replaceState({}, document.title, window.location.pathname);
-          const initialCourse: CourseState = {
-            id: sessionUser.course_id,
-            title: sessionUser.class_code,
-            curriculum_pack_id: 'cambridge-math-stage-9',
-          };
+    const bootstrap = async () => {
+      try {
+        if (launchCode) {
+          // LMS / LTI launch
+          const sessionUser = await api.exchangeLaunchCode(launchCode);
+
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname
+          );
+
+          /*
+           * Get the authoritative course configuration from the backend
+           * instead of hard-coding the curriculum pack on the frontend.
+           */
+          const course = await api.course(sessionUser.course_id);
+
           setRole(sessionUser.role);
           setUser(sessionUser);
-          setCourse(initialCourse);
-          await loadNodes(initialCourse.id, sessionUser.id, initialCourse.curriculum_pack_id);
-          setLoading(false);
-        })
-        .catch((err) => {
-          console.error('LTI launch exchange error:', err);
-          setLoading(false);
-        });
-    } else {
-      // 2. Standalone / Demo Path
-      fetch('http://localhost:4000/api/auth/demo')
-        .then((res) => {
-          if (!res.ok) throw new Error('Demo endpoint unavailable');
-          return res.json() as Promise<DemoContextResponse>;
-        })
-        .then(async (ctx) => {
+          setCourse(course);
+
+          await loadNodes(
+            course.id,
+            sessionUser.id,
+            course.curriculum_pack_id
+          );
+        } else {
+          // Standalone / demo mode
+          const ctx = (await api.getDemoContext()) as unknown as DemoContextResponse;
+
           setCourse(ctx.course);
           setUser(ctx.student);
-          await loadNodes(ctx.course.id, ctx.student.id, ctx.course.curriculum_pack_id);
-          setLoading(false);
-        })
-        .catch((err) => {
-          console.error('Failed to bootstrap demo context:', err);
-          setLoading(false);
-        });
-    }
+
+          await loadNodes(
+            ctx.course.id,
+            ctx.student.id,
+            ctx.course.curriculum_pack_id
+          );
+        }
+      } catch (err) {
+        console.error('Failed to bootstrap Agora:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void bootstrap();
   }, [loadNodes]);
 
   const handleRoleSwitch = () => {
@@ -96,9 +118,17 @@ export function App() {
 
   const handleSelectPack = async (packId: string) => {
     if (!course || !user) return;
+
     try {
       await api.setCourseCurriculum(course.id, packId);
-      setCourse((prev) => (prev ? { ...prev, curriculum_pack_id: packId } : null));
+
+      const updatedCourse = {
+        ...course,
+        curriculum_pack_id: packId,
+      };
+
+      setCourse(updatedCourse);
+
       await loadNodes(course.id, user.id, packId);
     } catch (err) {
       console.error('Failed to change curriculum pack:', err);
@@ -119,7 +149,10 @@ export function App() {
             Bootstrapping Agora Learning Realm...
           </span>
         </div>
-        <p className="text-xs text-outline">Connecting to curriculum service on :4000</p>
+
+        <p className="text-xs text-outline">
+          Connecting...
+        </p>
       </div>
     );
   }
@@ -128,7 +161,7 @@ export function App() {
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-sans">
       <TopNavBar
         role={role}
-        userName={role === 'Student' ? user.display_name : 'Dr. Jenkins'}
+        userName={user.display_name}
         courseTitle={course.title}
         activeView={activeView}
         onViewChange={setActiveView}
@@ -145,14 +178,16 @@ export function App() {
         />
       )}
 
-      {role === 'Student' && activeView === 'practice' && selectedNode && (
-        <PracticeRoom
-          courseId={course.id}
-          studentId={user.id}
-          node={selectedNode}
-          onExit={() => setActiveView('journey')}
-        />
-      )}
+      {role === 'Student' &&
+        activeView === 'practice' &&
+        selectedNode && (
+          <PracticeRoom
+            courseId={course.id}
+            studentId={user.id}
+            node={selectedNode}
+            onExit={() => setActiveView('journey')}
+          />
+        )}
 
       {role === 'Teacher' && (
         <TeacherDashboard

@@ -142,3 +142,8 @@ export interface StartSessionResponse {
   question_id: string;
   state: MasteryState;
 }
+export interface DemoContextResponse {
+  course: Course;
+  student: SessionContext;
+  teacher: SessionContext;
+}
