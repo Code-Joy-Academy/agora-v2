@@ -14,18 +14,21 @@ import { llmConfig } from './config.js';
  *
  * will load gemini.ts only.
  *
- * It will NOT load claude.ts, so ANTHROPIC_API_KEY is irrelevant.
+ * It will NOT load claude.ts, groq.ts, or openai.ts,
+ * so credentials for those providers are irrelevant.
  */
 export async function createLlmAdapter(): Promise<LlmAdapter> {
   switch (llmConfig.provider) {
     case 'gemini': {
-      const { GeminiAdapter } = await import('./gemini.js');
+      const { GeminiAdapter } =
+        await import('./gemini.js');
 
       return new GeminiAdapter(llmConfig);
     }
 
     case 'claude': {
-      const { ClaudeAdapter } = await import('./claude.js');
+      const { ClaudeAdapter } =
+        await import('./claude.js');
 
       return new ClaudeAdapter(llmConfig);
     }
@@ -35,10 +38,16 @@ export async function createLlmAdapter(): Promise<LlmAdapter> {
         'OpenAI adapter is configured but not implemented yet.',
       );
 
+    case 'groq': {
+      const { GroqAdapter } =
+        await import('./groq.js');
+
+      return new GroqAdapter(llmConfig);
+    }
+
     default:
       throw new Error(
         `Unsupported LLM provider: ${llmConfig.provider}`,
       );
   }
 }
-

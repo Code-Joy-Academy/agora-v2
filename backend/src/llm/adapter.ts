@@ -12,8 +12,12 @@ import type { RetrievedResource } from '../retrieval/retrieval.js';
  *
  * Add a provider here only when a corresponding adapter has been implemented.
  */
-export type LlmProvider = 'gemini' | 'claude' | 'openai';
-
+export type LlmProvider =
+  | 'gemini'
+  | 'claude'
+  | 'openai'
+  | 'groq';
+  
 /**
  * Runtime configuration for the LLM layer.
  *

@@ -1,4 +1,7 @@
-import type { LlmConfig, LlmProvider } from './adapter.js';
+import type {
+  LlmConfig,
+  LlmProvider,
+} from './adapter.js';
 
 /**
  * Default models for each supported provider.
@@ -11,28 +14,35 @@ const defaultModels: Record<LlmProvider, string> = {
   gemini: 'gemini-3.7-flash',
   claude: 'claude-haiku-4-5',
   openai: 'gpt-5-mini',
+  groq: 'openai/gpt-oss-120b',
 };
 
 /**
  * Read and validate LLM_PROVIDER from the environment.
- *
- * Agora fails fast if an unsupported provider is configured.
  */
 function getProvider(): LlmProvider {
-  const value = process.env.LLM_PROVIDER ?? 'gemini';
+  const value =
+    process.env.LLM_PROVIDER?.trim() || 'gemini';
+
+  const supportedProviders: LlmProvider[] = [
+    'gemini',
+    'claude',
+    'openai',
+    'groq',
+  ];
 
   if (
-    value !== 'gemini' &&
-    value !== 'claude' &&
-    value !== 'openai'
+    !supportedProviders.includes(
+      value as LlmProvider,
+    )
   ) {
     throw new Error(
       `Invalid LLM_PROVIDER "${value}". ` +
-        `Expected one of: gemini, claude, openai.`,
+        `Expected one of: ${supportedProviders.join(', ')}.`,
     );
   }
 
-  return value;
+  return value as LlmProvider;
 }
 
 /**
@@ -42,7 +52,8 @@ export function getLlmConfig(): LlmConfig {
   const provider = getProvider();
 
   const model =
-    process.env.LLM_MODEL?.trim() || defaultModels[provider];
+    process.env.LLM_MODEL?.trim() ||
+    defaultModels[provider];
 
   return {
     provider,
@@ -53,6 +64,7 @@ export function getLlmConfig(): LlmConfig {
 /**
  * Resolved LLM configuration.
  *
- * This is evaluated once when the application imports the module.
+ * This is evaluated once when the application imports
+ * the module.
  */
 export const llmConfig = getLlmConfig();
