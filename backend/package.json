@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "db:init": "tsx src/db/init.ts",
     "seed": "tsx src/curriculum/curriculumLoader.ts",
+    "db:migrate": "tsx src/db/migrate.ts",
     "lti:keys": "tsx src/lti/keys.ts"
   },
   "dependencies": {
@@ -24,7 +25,8 @@
     "openai": "^7.23.0",
     "pdf-parse": "^1.1.1",
     "pg": "^8.12.0",
-    "uuid": "^9.0.1",
+    "resend": "^6.38.1",
+    "uuid": "^14.0.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {

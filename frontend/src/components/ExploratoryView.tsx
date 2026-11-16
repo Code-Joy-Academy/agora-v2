@@ -46,7 +46,7 @@ export default function ExploratoryView({
     try {
       const result = await api.askExploratory({
         course_id: user.course_id,
-        node_id: null,
+        node_id: "",
         studentQuery: trimmedQuery,
       });
 

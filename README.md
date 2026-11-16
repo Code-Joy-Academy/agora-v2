@@ -1164,7 +1164,7 @@ This allows a student to enter Agora through an LMS without requiring a separate
 
 # 37. AGS Reliability
 
-Grade passback is intentionally fire-and-forget.
+Grade pass back is intentionally fire-and-forget.
 
 The tutoring interaction should not become:
 

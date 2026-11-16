@@ -286,7 +286,6 @@ export function applyTurn(
 
       last_misconception: null,
     };
-
     return {
       state,
 

@@ -1,127 +1,237 @@
-import { useState, useEffect, useCallback } from 'react';
-import { api } from './api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, setCsrfToken, type AuthMe } from './api';
+
+import { AuthScreen } from './components/auth/AuthScreen';
 import { TopNavBar } from './components/shared/TopNavBar';
 import { StudentJourney } from './components/student/StudentJourney';
 import { PracticeRoom } from './components/student/PracticeRoom';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
+
 import type {
   Course,
   CurriculumNode,
   SessionContext,
 } from './types';
 
-interface DemoContextResponse {
-  course: Course;
-  student: SessionContext;
-  teacher: SessionContext;
-}
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+
+type ActiveUser = SessionContext & {
+  email?: string | null;
+};
+
+// -----------------------------------------------------------------------------
+// App
+// -----------------------------------------------------------------------------
 
 export function App() {
-  const [role, setRole] = useState<'Student' | 'Teacher'>('Student');
+  const [course, setCourse] = useState<Course | null>(null);
+  const [user, setUser] = useState<ActiveUser | null>(null);
+
+  const [nodes, setNodes] = useState<CurriculumNode[]>([]);
+  const [selectedNode, setSelectedNode] =
+    useState<CurriculumNode | null>(null);
+
   const [activeView, setActiveView] = useState<
     'journey' | 'practice' | 'dashboard'
   >('journey');
 
-  const [course, setCourse] = useState<Course | null>(null);
-  const [user, setUser] = useState<SessionContext | null>(null);
-  const [nodes, setNodes] = useState<CurriculumNode[]>([]);
-  const [selectedNode, setSelectedNode] =
-    useState<CurriculumNode | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+// -----------------------------------------------------------------------------
+// Knowledge Map
+// -----------------------------------------------------------------------------
 
   const loadNodes = useCallback(
-    async (courseId: string, studentId: string, packId?: string) => {
-      try {
-        const nodeList = await api.getKnowledgeMap(
-          courseId,
-          studentId,
-          packId
-        );
+    async (courseId: string, packId?: string) => {
+      const nodeList = await api.getKnowledgeMap(
+        courseId,
+        undefined,
+        packId,
+      );
 
-        setNodes(nodeList);
+      setNodes(nodeList);
 
-        if (nodeList.length > 0) {
-          setSelectedNode(nodeList[0]);
-        } else {
-          setSelectedNode(null);
+      // Preserve the currently selected node if it still exists.
+      setSelectedNode((current) => {
+        if (current) {
+          const existingNode = nodeList.find(
+            (node) => node.id === current.id,
+          );
+
+          if (existingNode) {
+            return existingNode;
+          }
         }
-      } catch (err) {
-        console.error('Failed to fetch knowledge map:', err);
-      }
+
+        return nodeList[0] ?? null;
+      });
     },
-    []
+    [],
   );
 
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const launchCode = urlParams.get('launch');
+// -----------------------------------------------------------------------------
+// Authenticated Application Bootstrap
+// -----------------------------------------------------------------------------
 
-    const bootstrap = async () => {
-      try {
-        if (launchCode) {
-          // LMS / LTI launch
-          const sessionUser = await api.exchangeLaunchCode(launchCode);
+  const loadAuthenticatedApp = useCallback(
+    async (principal?: AuthMe) => {
+      // Use the supplied principal or retrieve the current session.
+      const me = principal ?? await api.me();
 
-          window.history.replaceState(
-            {},
-            document.title,
-            window.location.pathname
-          );
+      // Resolve the user's first available course.
+      const courseId = me.courses[0];
 
-          /*
-           * Get the authoritative course configuration from the backend
-           * instead of hard-coding the curriculum pack on the frontend.
-           */
-          const course = await api.course(sessionUser.course_id);
-
-          setRole(sessionUser.role);
-          setUser(sessionUser);
-          setCourse(course);
-
-          await loadNodes(
-            course.id,
-            sessionUser.id,
-            course.curriculum_pack_id
-          );
-        } else {
-          // Standalone / demo mode
-          const ctx = (await api.getDemoContext()) as unknown as DemoContextResponse;
-
-          setCourse(ctx.course);
-          setUser(ctx.student);
-
-          await loadNodes(
-            ctx.course.id,
-            ctx.student.id,
-            ctx.course.curriculum_pack_id
-          );
-        }
-      } catch (err) {
-        console.error('Failed to bootstrap Agora:', err);
-      } finally {
-        setLoading(false);
+      if (!courseId) {
+        throw new Error(
+          'Your account is not enrolled in an Agora course. Ask your institution administrator for access.',
+        );
       }
-    };
 
-    void bootstrap();
-  }, [loadNodes]);
+      // Fetch authoritative course configuration.
+      const courseData = await api.course(courseId);
 
-  const handleRoleSwitch = () => {
-    if (role === 'Student') {
-      setRole('Teacher');
-      setActiveView('dashboard');
-    } else {
-      setRole('Student');
-      setActiveView('journey');
+      // Resolve the user's role for this specific course.
+      const courseRole = me.course_roles[courseId] ?? me.role;
+
+      const activeUser: ActiveUser = {
+        id: me.id,
+        display_name: me.display_name,
+        role: courseRole,
+        course_id: courseId,
+        class_code: courseData.title,
+        email: me.email,
+      };
+
+      setCourse(courseData);
+      setUser(activeUser);
+
+      // Set the initial view according to the user's course role.
+      setActiveView(
+        courseRole === 'Teacher' ? 'dashboard' : 'journey',
+      );
+
+      // Only students need the knowledge map.
+      if (courseRole === 'Student') {
+        await loadNodes(
+          courseId,
+          courseData.curriculum_pack_id,
+        );
+      } else {
+        setNodes([]);
+        setSelectedNode(null);
+      }
+    },
+    [loadNodes],
+  );
+
+// -----------------------------------------------------------------------------
+// Application Bootstrap
+// -----------------------------------------------------------------------------
+
+  const bootstrap = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const params = new URLSearchParams(
+        window.location.search,
+      );
+
+      const launchCode = params.get('launch');
+
+      if (launchCode) {
+        // Exchange the single-use LMS/LTI launch code.
+        await api.exchangeLaunchCode(launchCode);
+
+        // Remove the launch code immediately from browser history.
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname,
+        );
+      } else if (window.location.pathname === '/auth/verify') {
+        // Allow the authentication screen to handle email verification.
+        setLoading(false);
+        return;
+      }
+
+      // Load the authenticated principal from the cookie-backed session.
+      await loadAuthenticatedApp();
+
+    } catch (err) {
+      setUser(null);
+      setCourse(null);
+      setNodes([]);
+      setSelectedNode(null);
+
+      // Authentication failures should display the login screen.
+      // Other errors should be shown to the user.
+      if (
+        err instanceof Error &&
+        !/Authentication required|401/i.test(err.message)
+      ) {
+        setError(err.message);
+      }
+
+    } finally {
+      setLoading(false);
     }
+  }, [loadAuthenticatedApp]);
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
+
+// -----------------------------------------------------------------------------
+// Logout
+// -----------------------------------------------------------------------------
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // The session may already have expired.
+    }
+
+    // Clear local authentication state.
+    setCsrfToken(null);
+
+    setCourse(null);
+    setUser(null);
+    setNodes([]);
+    setSelectedNode(null);
+
+    setActiveView('journey');
+    setError('');
+
+    // Return to the application root.
+    window.history.replaceState(
+      {},
+      document.title,
+      '/',
+    );
   };
+
+// -----------------------------------------------------------------------------
+// Curriculum Pack Selection
+// -----------------------------------------------------------------------------
 
   const handleSelectPack = async (packId: string) => {
     if (!course || !user) return;
 
     try {
-      await api.setCourseCurriculum(course.id, packId);
+      setError('');
 
+      // Persist the selected curriculum pack.
+      await api.setCourseCurriculum(
+        course.id,
+        packId,
+      );
+
+      // Update local course state.
       const updatedCourse = {
         ...course,
         curriculum_pack_id: packId,
@@ -129,56 +239,119 @@ export function App() {
 
       setCourse(updatedCourse);
 
-      await loadNodes(course.id, user.id, packId);
+      // Reload the knowledge map for the selected pack.
+      await loadNodes(
+        course.id,
+        packId,
+      );
+
     } catch (err) {
-      console.error('Failed to change curriculum pack:', err);
+      console.error(
+        'Failed to change curriculum pack:',
+        err,
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to change curriculum pack.',
+      );
     }
   };
+
+// -----------------------------------------------------------------------------
+// Node Selection
+// -----------------------------------------------------------------------------
 
   const handleSelectNode = (node: CurriculumNode) => {
     setSelectedNode(node);
     setActiveView('practice');
   };
 
-  if (loading || !course || !user) {
+// -----------------------------------------------------------------------------
+// Loading Screen
+// -----------------------------------------------------------------------------
+
+  if (loading) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background text-on-surface">
-        <div className="flex items-center gap-2 mb-2">
+      <div className="min-h-screen flex items-center justify-center bg-background text-on-surface">
+        <div className="flex items-center gap-3">
           <span className="w-3 h-3 rounded-full bg-primary animate-ping" />
-          <span className="text-sm font-semibold text-on-surface-variant">
-            Bootstrapping Agora Learning Realm...
+
+          <span className="text-sm text-on-surface-variant">
+            Connecting to Agora…
           </span>
         </div>
-
-        <p className="text-xs text-outline">
-          Connecting...
-        </p>
       </div>
     );
   }
 
+// -----------------------------------------------------------------------------
+// Authentication Screen
+// -----------------------------------------------------------------------------
+
+  if (!user || !course) {
+    return (
+      <>
+        <AuthScreen
+          onAuthenticated={() => {
+            void bootstrap();
+          }}
+        />
+
+        {error && (
+          <p
+            role="alert"
+            className="fixed bottom-4 left-4 right-4 mx-auto max-w-lg rounded-xl bg-error-container p-3 text-sm text-on-error-container"
+          >
+            {error}
+          </p>
+        )}
+      </>
+    );
+  }
+
+// -----------------------------------------------------------------------------
+// Main Application
+// -----------------------------------------------------------------------------
+
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-sans">
+
+      {/* Navigation */}
       <TopNavBar
-        role={role}
+        role={user.role}
         userName={user.display_name}
         courseTitle={course.title}
         activeView={activeView}
         onViewChange={setActiveView}
-        onRoleSwitch={handleRoleSwitch}
+        onLogout={handleLogout}
       />
 
-      {role === 'Student' && activeView === 'journey' && (
-        <StudentJourney
-          userName={user.display_name}
-          nodes={nodes}
-          activePackId={course.curriculum_pack_id}
-          onSelectPack={handleSelectPack}
-          onSelectNode={handleSelectNode}
-        />
+      {/* Application Error */}
+      {error && (
+        <p
+          role="alert"
+          className="mx-auto mt-3 max-w-4xl rounded-lg bg-error-container p-3 text-xs text-on-error-container"
+        >
+          {error}
+        </p>
       )}
 
-      {role === 'Student' &&
+      {/* Student Journey */}
+      {user.role === 'Student' &&
+        activeView === 'journey' && (
+          <StudentJourney
+            userName={user.display_name}
+            nodes={nodes}
+            activePackId={course.curriculum_pack_id}
+            onSelectPack={handleSelectPack}
+            onSelectNode={handleSelectNode}
+          />
+        )}
+
+      {/* Student Practice Room */}
+      {user.role === 'Student' &&
         activeView === 'practice' &&
         selectedNode && (
           <PracticeRoom
@@ -189,12 +362,14 @@ export function App() {
           />
         )}
 
-      {role === 'Teacher' && (
+      {/* Teacher Dashboard */}
+      {user.role === 'Teacher' && (
         <TeacherDashboard
           courseId={course.id}
           currentPackId={course.curriculum_pack_id}
         />
       )}
+
     </div>
   );
 }

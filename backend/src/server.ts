@@ -1,8 +1,7 @@
 import express from 'express';
-import cors from 'cors';
+import { randomUUID } from 'node:crypto';
 import helmet from 'helmet';
 import { createServer } from 'http';
-
 import { pool } from './db/pool.js';
 
 import { loginRouter } from './lti/oidc.js';
@@ -16,44 +15,87 @@ import { nodesRouter } from './routes/nodes.js';
 import { ingestionRouter } from './routes/ingestion.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { dashboardRouter } from './routes/dashboard.js';
+import { emailAuthRouter } from './routes/emailAuth.js';
+import { authRouter } from './routes/auth.js';
 
 import { loadAllPacks } from './curriculum/curriculumLoader.js';
 import { initWsHub } from './ws/hub.js';
 
 import { config } from './config/env.js';
+import cors, { type CorsOptions } from 'cors';
+
 
 const app = express();
 
-/*
- * Security
- */
+const allowedOrigins = new Set(
+    config.corsOrigins
+        .split(',')
+        .map((origin) => origin.trim().replace(/\/$/, ''))
+        .filter(Boolean),
+);
+
+const corsOptions: CorsOptions = {
+  origin(origin, callback) {
+    // Allow requests without an Origin header (e.g. server-to-server).
+    if (!origin || allowedOrigins.has(origin.replace(/\/$/, ''))) {
+      return callback(null, true);
+    }
+
+    console.warn('[CORS] Rejected origin:', origin);
+    return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+  },
+  credentials: true,
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Agora-CSRF',
+    'Idempotency-Key',
+  ],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// LOGGING
+app.use((req, res, next) => {
+  const requestId = randomUUID();
+  const startedAt = Date.now();
+
+  res.setHeader('X-Request-Id', requestId);
+
+  console.info(JSON.stringify({
+    event: 'http_request_started',
+    requestId,
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin ?? null,
+    timestamp: new Date().toISOString(),
+  }));
+
+  res.on('finish', () => {
+    console.info(JSON.stringify({
+      event: 'http_request_completed',
+      requestId,
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+    }));
+  });
+
+  next();
+});
+
+/* Security */
 app.disable('x-powered-by');
 app.use(helmet());
 
-/*
- * CORS
- */
-app.use(
-  cors({
-    origin: config.corsOrigins,
-  }),
-);
-
-/*
- * Body parsing
- */
-app.use(
-  express.json({
-    limit: '1mb',
-  }),
-);
-
-app.use(
-  express.urlencoded({
-    limit: '1mb',
-    extended: true,
-  }),
-);
+/* Body parsing */
+app.use(express.json({limit: '1mb',}),);
+app.use(express.urlencoded({limit: '1mb', extended: true,}),);
 
 /*
  * LTI
@@ -78,6 +120,10 @@ if (config.enableMockPlatform) {
  * Application routes
  */
 app.use('/api', sessionRouter);
+app.use('/api', authRouter);
+app.use('/api', sessionRouter);
+app.use('/api', authRouter);
+app.use('/api', emailAuthRouter);
 app.use('/api', nodesRouter);
 app.use('/api', ingestionRouter);
 app.use('/api', sessionsRouter);
@@ -112,8 +158,7 @@ app.get('/health/ready', async (_req, res) => {
 /*
  * Error handler
  */
-app.use(
-  (
+app.use((
     err: unknown,
     _req: express.Request,
     res: express.Response,

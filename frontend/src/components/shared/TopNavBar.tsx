@@ -4,7 +4,7 @@ interface TopNavBarProps {
     courseTitle: string;
     activeView: 'journey' | 'practice' | 'dashboard';
     onViewChange: (v: 'journey' | 'practice' | 'dashboard') => void;
-    onRoleSwitch: () => void;
+    onLogout: () => void;
   }
   
   export function TopNavBar({
@@ -13,7 +13,7 @@ interface TopNavBarProps {
     courseTitle,
     activeView,
     onViewChange,
-    onRoleSwitch,
+    onLogout,
   }: TopNavBarProps) {
     return (
       <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-outline-variant/30 shadow-xs">
@@ -66,10 +66,10 @@ interface TopNavBarProps {
   
             <button
               type="button"
-              onClick={onRoleSwitch}
+              onClick={onLogout}
               className="px-3 py-1.5 rounded-xl bg-surface-container-low text-xs font-bold text-primary border border-outline-variant/30 hover:bg-surface-container transition-all"
             >
-              Switch to {role === 'Student' ? 'Teacher' : 'Student'}
+              Sign Out
             </button>
   
             <div className="flex items-center gap-2 pl-2 border-l border-outline-variant/30">

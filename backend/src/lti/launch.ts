@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { randomUUID } from 'crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createHash, randomBytes } from 'node:crypto';
 import { pool } from '../db/pool.js';
 import { oidcLoginStore } from './oidc.js';
 
-export const sessionCodeStore = new Map<string, { expires: number; user: SessionUser }>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of sessionCodeStore) if (v.expires < now) sessionCodeStore.delete(k);
-}, 60_000).unref();
+// export const sessionCodeStore = new Map<string, { expires: number; user: SessionUser }>();
+// setInterval(() => {
+//   const now = Date.now();
+//   for (const [k, v] of sessionCodeStore) if (v.expires < now) sessionCodeStore.delete(k);
+// }, 60_000).unref();
 
 export interface SessionUser {
   id: string;
@@ -97,12 +97,29 @@ launchRouter.post('/lti/launch', async (req, res) => {
     [course_id, user_id, sub]
   );
 
-  const code = randomUUID();
-  sessionCodeStore.set(code, {
-    expires: Date.now() + 60_000,
-    user: { id: user_id, display_name, role, course_id, class_code: context.id },
-  });
+  const { rows: [user] } = await pool.query(
+      `INSERT INTO users (institution_id, lti_sub, display_name, role)
+   VALUES ($1, $2, $3, $4)
+   ON CONFLICT (institution_id, lti_sub)
+   DO UPDATE SET
+     display_name = EXCLUDED.display_name,
+     role = EXCLUDED.role
+   RETURNING id`,
+      [claims.sub, role],
+  );
+  const code = randomBytes(32).toString('base64url');
+
+  const codeHash = createHash('sha256')
+      .update(code)
+      .digest('hex');
+
+  await pool.query(
+      `INSERT INTO lti_launch_codes (user_id, code_hash, expires_at)
+   VALUES ($1, $2, NOW() + INTERVAL '2 minutes')`,
+      [user.id, codeHash],
+  );
 
   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
   res.redirect(`${frontendUrl}/?launch=${code}`);
+
 });

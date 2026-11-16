@@ -15,7 +15,7 @@ export default function IngestionManager({ courseId }: { courseId: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = () => api.documents(courseId).then(setDocs);
-  useEffect(() => { refresh(); }, [courseId]);
+  useEffect(() => { refresh().then(r => {}); }, [courseId]);
 
   const upload = async () => {
     const file = fileRef.current?.files?.[0];

@@ -20,7 +20,10 @@ sessionsRouter.post('/sessions/:id/turns', async (req, res) => {
     student_id: string; course_id: string; node_id: string; question: string; studentAttempt: string; secondsSpent: number;
   };
 
-  const result = await runStudentTurn({ session_id, student_id, course_id, node_id, question, studentAttempt, secondsSpent: secondsSpent ?? 0 });
+  const result = await runStudentTurn({
+    session_id, student_id, course_id, node_id, question, studentAttempt, secondsSpent: secondsSpent ?? 0,
+    idempotency_key: ''
+  });
   if (result.alert) broadcastToTeachers(course_id, result.alert);
   broadcastToTeachers(course_id, { type: 'state_update', course_id, node_id, student_id, session_id, payload: result.state });
 

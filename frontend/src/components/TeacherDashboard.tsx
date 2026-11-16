@@ -23,7 +23,7 @@ export default function TeacherDashboard({ user }: { user: SessionUser }) {
   };
 
   useEffect(() => {
-    refresh();
+    refresh().then(r => {});
     const ws = new WebSocket(`${WS_BASE}?course_id=${user.course_id}&role=Teacher`);
     ws.onmessage = () => refresh();
     wsRef.current = ws;
