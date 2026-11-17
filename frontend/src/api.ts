@@ -415,7 +415,7 @@ export const api = {
     // ---------------------------------------------------------------------------
 
     startSession: (
-        course_id: string, node_id: string, id: string,
+        course_id: string, node_id: string,
     ): Promise<StartSessionResponse> =>
         req<StartSessionResponse>('/api/sessions', {
             method: 'POST',

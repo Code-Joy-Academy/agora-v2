@@ -29,7 +29,7 @@ export function PracticeRoom({ courseId, studentId, node, onExit }: PracticeRoom
 
   useEffect(() => {
     let mounted = true;
-    api.startSession(studentId, courseId, node.id).then((res) => {
+    api.startSession(studentId, courseId).then((res) => {
       if (!mounted) return;
       setSessionId(res.session_id);
       setQuestionPrompt(res.question);

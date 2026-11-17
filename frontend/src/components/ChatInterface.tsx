@@ -51,7 +51,7 @@ export default function ChatInterface({
         turnStartRef.current = Date.now();
 
         api
-            .startSession(user.course_id, node.id)
+            .startSession(user.course_id, node.id,)
             .then((result) => {
               if (cancelled) return;
 
