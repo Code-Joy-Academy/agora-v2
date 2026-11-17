@@ -73,9 +73,6 @@ export function PracticeRoom({ courseId, studentId, node, onExit }: PracticeRoom
     try {
       const res = await api.submitTurn({
         session_id: sessionId,
-        student_id: studentId,
-        course_id: courseId,
-        node_id: node.id,
         studentAttempt: userText,
         secondsSpent: 15,
       });
