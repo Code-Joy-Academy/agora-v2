@@ -17,6 +17,11 @@ import { sessionsRouter } from './routes/sessions.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { emailAuthRouter } from './routes/emailAuth.js';
 import { authRouter } from './routes/auth.js';
+import { institutionAdminRouter } from './routes/institutionAdmin.js';
+
+import { startPassbackWorker } from './lti/passbackWorker.js';
+import { startAuthMaintenance } from './auth/maintenance.js';
+import { connectRateLimitStore, closeRateLimitStore } from './auth/rateLimit.js';
 
 import { loadAllPacks } from './curriculum/curriculumLoader.js';
 import { initWsHub } from './ws/hub.js';
@@ -26,6 +31,9 @@ import cors, { type CorsOptions } from 'cors';
 
 
 const app = express();
+
+// Behind Render's proxy: use the real client IP (req.ip) for rate limiting.
+if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
 const allowedOrigins = new Set(
     config.corsOrigins
@@ -111,8 +119,8 @@ app.use('/api', toolJwksRouter);
  */
 if (config.enableMockPlatform) {
   app.use(
-    '/api/lti/mock-platform',
-    mockPlatformRouter,
+      '/api/lti/mock-platform',
+      mockPlatformRouter,
   );
 }
 
@@ -121,9 +129,8 @@ if (config.enableMockPlatform) {
  */
 app.use('/api', sessionRouter);
 app.use('/api', authRouter);
-app.use('/api', sessionRouter);
-app.use('/api', authRouter);
 app.use('/api', emailAuthRouter);
+app.use('/api/admin', institutionAdminRouter);
 app.use('/api', nodesRouter);
 app.use('/api', ingestionRouter);
 app.use('/api', sessionsRouter);
@@ -159,30 +166,31 @@ app.get('/health/ready', async (_req, res) => {
  * Error handler
  */
 app.use((
-    err: unknown,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction,
-  ) => {
-    console.error(
-      'Unhandled server error:',
-      err,
-    );
+        err: unknown,
+        _req: express.Request,
+        res: express.Response,
+        _next: express.NextFunction,
+    ) => {
+      console.error(
+          'Unhandled server error:',
+          err,
+      );
 
-    if (res.headersSent) {
-      return;
-    }
+      if (res.headersSent) {
+        return;
+      }
 
-    res.status(500).json({
-      error: 'Internal server error',
-    });
-  },
+      res.status(500).json({
+        error: 'Internal server error',
+      });
+    },
 );
 
 /*
  * HTTP + WebSocket server
  */
 const server = createServer(app);
+const timers: NodeJS.Timeout[] = [];
 
 initWsHub(server);
 
@@ -191,37 +199,40 @@ initWsHub(server);
  */
 async function start() {
   console.log(
-    `Starting Agora in ${config.nodeEnv} mode...`,
+      `Starting Agora in ${config.nodeEnv} mode...`,
   );
 
   /*
    * Load curriculum before accepting requests.
    */
   await loadAllPacks();
+  await connectRateLimitStore();
 
   /*
    * Never run the mock platform in production.
    */
   if (
-    config.nodeEnv !== 'production' &&
-    config.enableMockPlatform
+      config.nodeEnv !== 'production' &&
+      config.enableMockPlatform
   ) {
     await bootstrapMockPlatform(
-      config.agoraBaseUrl,
+        config.agoraBaseUrl,
     );
   }
 
   server.listen(
-    config.port,
-    () => {
-      console.log(
-        `Agora backend listening on port ${config.port}`,
-      );
+      config.port,
+      () => {
+        console.log(
+            `Agora backend listening on port ${config.port}`,
+        );
 
-      console.log(
-        `Base URL: ${config.agoraBaseUrl}`,
-      );
-    },
+        console.log(
+            `Base URL: ${config.agoraBaseUrl}`,
+        );
+
+        timers.push(startPassbackWorker(), startAuthMaintenance());
+      },
   );
 }
 
@@ -230,22 +241,25 @@ async function start() {
  */
 async function shutdown(signal: string) {
   console.log(
-    `${signal} received. Shutting down...`,
+      `${signal} received. Shutting down...`,
   );
+
+  timers.forEach(clearInterval);
 
   server.close(async () => {
     try {
+      await closeRateLimitStore();
       await pool.end();
 
       console.log(
-        'Agora shutdown complete.',
+          'Agora shutdown complete.',
       );
 
       process.exit(0);
     } catch (error) {
       console.error(
-        'Shutdown error:',
-        error,
+          'Shutdown error:',
+          error,
       );
 
       process.exit(1);
@@ -266,8 +280,8 @@ process.on('SIGINT', () => {
  */
 start().catch((error) => {
   console.error(
-    'Failed to start Agora:',
-    error,
+      'Failed to start Agora:',
+      error,
   );
 
   process.exit(1);

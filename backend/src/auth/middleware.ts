@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { resolvePrincipal, sessionTokenFromRequest, type AuthPrincipal } from './session.js';
 import { config } from '../config/env.js';
+import {pool} from "../db/pool.js";
 
 declare global {
     namespace Express {
@@ -42,6 +43,21 @@ export function requireRole(...roles: Array<'Teacher' | 'Student'>) {
         next();
     };
 }
+/** Institution-wide admin rights live in `institution_admins`, separate from Teacher/Student course roles. */
+export async function requireInstitutionAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+        if (!req.auth) return res.status(401).json({ error: 'Authentication required' });
+        const { rowCount } = await pool.query(
+            'SELECT 1 FROM institution_admins WHERE user_id = $1 AND institution_id = $2',
+            [req.auth.userId, req.auth.institutionId],
+        );
+        if (!rowCount) return res.status(403).json({ error: 'Institution administrator access required' });
+        next();
+    } catch (error) {
+        next(error);
+    }
+}
+
 
 export function requireCourseMember(req: Request, res: Response, next: NextFunction) {
     const courseId = req.params.id ?? req.params.course_id ?? req.body?.course_id;

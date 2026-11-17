@@ -17,15 +17,15 @@ export const SESSION_COOKIE = 'agora_session';
 export const CSRF_COOKIE = 'agora_csrf';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
-const cookieSecure = config.nodeEnv === 'production' || config.sessionCookieSecure;
+// Always HttpOnly and host-only (no `domain` attribute). Browsers reject SameSite=None without Secure.
+const cookieSecure = config.nodeEnv === 'production' || config.sessionCookieSecure || config.cookieSameSite === 'none';
+const baseCookie = { httpOnly: true, secure: cookieSecure, sameSite: config.cookieSameSite, path: '/' } as const;
 
 export function issueCsrfToken(res: Response, expiresAt = new Date(Date.now() + SESSION_TTL_MS)): string {
     const csrfToken = randomBytes(24).toString('base64url');
     // HttpOnly cookie is readable by the API; the value is also returned once in
     // the JSON response so a frontend on a separate host can set the CSRF header.
-    res.cookie(CSRF_COOKIE, csrfToken, {
-        httpOnly: true, secure: cookieSecure, sameSite: config.cookieSameSite, path: '/', expires: expiresAt,
-    });
+    res.cookie(CSRF_COOKIE, csrfToken, { ...baseCookie, expires: expiresAt });
     return csrfToken;
 }
 
@@ -52,9 +52,9 @@ export async function destroyAppSession(
 
     await pool.query(
         `UPDATE auth_sessions
-        SET revoked_at = NOW()
-      WHERE token_hash = $1
-        AND revoked_at IS NULL`,
+         SET revoked_at = NOW()
+         WHERE token_hash = $1
+           AND revoked_at IS NULL`,
         [hash(token)],
     );
 }
@@ -63,13 +63,13 @@ export async function resolvePrincipal(token: string | undefined): Promise<AuthP
     if (!token) return null;
     const { rows } = await pool.query(
         `SELECT u.id, u.institution_id, u.display_name, u.role, u.email,
-            COALESCE(array_agg(cm.course_id) FILTER (WHERE cm.course_id IS NOT NULL), '{}') AS courses,
-            COALESCE(jsonb_object_agg(cm.course_id, cm.role) FILTER (WHERE cm.course_id IS NOT NULL), '{}'::jsonb) AS course_roles
-       FROM auth_sessions s
-       JOIN users u ON u.id = s.user_id
-       LEFT JOIN course_memberships cm ON cm.user_id = u.id
-      WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
-      GROUP BY u.id`,
+                COALESCE(array_agg(cm.course_id) FILTER (WHERE cm.course_id IS NOT NULL), '{}') AS courses,
+                COALESCE(jsonb_object_agg(cm.course_id, cm.role) FILTER (WHERE cm.course_id IS NOT NULL), '{}'::jsonb) AS course_roles
+         FROM auth_sessions s
+                  JOIN users u ON u.id = s.user_id
+                  LEFT JOIN course_memberships cm ON cm.user_id = u.id
+         WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
+         GROUP BY u.id`,
         [hash(token)],
     );
     const row = rows[0];
@@ -86,13 +86,8 @@ export async function resolvePrincipal(token: string | undefined): Promise<AuthP
 }
 
 export function clearSessionCookie(res: Response): void {
-    res.clearCookie(CSRF_COOKIE, { httpOnly: true, secure: cookieSecure, sameSite: config.cookieSameSite, path: '/' });
-    res.clearCookie(SESSION_COOKIE, {
-        httpOnly: true,
-        secure: cookieSecure,
-        sameSite: config.cookieSameSite,
-        path: '/',
-    });
+    res.clearCookie(CSRF_COOKIE, baseCookie);
+    res.clearCookie(SESSION_COOKIE, baseCookie);
 }
 
 export function sessionTokenFromRequest(req: Request): string | undefined {
@@ -114,13 +109,7 @@ export function setAppSessionCookies(
 ): string {
     const csrfToken = issueCsrfToken(res, expiresAt);
 
-    res.cookie(SESSION_COOKIE, token, {
-        httpOnly: true,
-        secure: cookieSecure,
-        sameSite: config.cookieSameSite,
-        path: '/',
-        expires: expiresAt,
-    });
+    res.cookie(SESSION_COOKIE, token, { ...baseCookie, expires: expiresAt });
 
     return csrfToken;
 }

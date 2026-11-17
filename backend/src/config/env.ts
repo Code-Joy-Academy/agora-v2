@@ -21,7 +21,11 @@ export const config = {
   resendApiKey: process.env.RESEND_API_KEY ?? '',
   emailFrom: process.env.EMAIL_FROM ?? 'Agora <login@your-domain.example>',
   cookieSameSite: (process.env.COOKIE_SAME_SITE ?? (process.env.NODE_ENV === 'production' ? 'none' : 'lax')) as 'lax' | 'strict' | 'none',
+
+  redisUrl: process.env.REDIS_URL ?? '',
+
   sessionCookieSecure: process.env.SESSION_COOKIE_SECURE !== 'false',
+  trustProxy: Number(process.env.TRUST_PROXY ?? (process.env.NODE_ENV === 'production' ? 1 : 0)),
 
   llmProvider:
       process.env.LLM_PROVIDER ?? 'groq',

@@ -182,16 +182,16 @@ export async function startNodeSession(
 
     await pool.query(
         `
-      INSERT INTO sessions (
-        id,
-        student_id,
-        course_id,
-        node_id,
-        mode,
-        question_id
-      )
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `,
+            INSERT INTO sessions (
+                id,
+                student_id,
+                course_id,
+                node_id,
+                mode,
+                question_id
+            )
+            VALUES ($1, $2, $3, $4, $5, $6)
+        `,
         [
             sessionId,
             studentId,
@@ -282,10 +282,10 @@ export async function runStudentTurn(
 
         const { rows: sessionRows } = await lockClient.query(
             `SELECT s.id, s.student_id, s.course_id, s.node_id, s.question_id,
-              c.curriculum_pack_id, n.pack_id AS node_pack_id
-         FROM sessions s JOIN courses c ON c.id=s.course_id
-         LEFT JOIN curriculum_nodes n ON n.id=s.node_id
-        WHERE s.id=$1`, [session_id],
+                    c.curriculum_pack_id, n.pack_id AS node_pack_id
+             FROM sessions s JOIN courses c ON c.id=s.course_id
+                             LEFT JOIN curriculum_nodes n ON n.id=s.node_id
+             WHERE s.id=$1`, [session_id],
         );
         const session = sessionRows[0];
         if (!session) throw new Error('Session not found.');
@@ -370,14 +370,17 @@ export async function runStudentTurn(
                     payload: { reason: alertReason, hint_count: nextState.hint_count, question: activeQuestion },
                 };
             }
+            // One open job per student/course; the worker recomputes the course grade when it runs.
             await client.query(
-                `INSERT INTO lms_passback_jobs(course_id,student_id,node_id,score)
-         SELECT $1,$2,$3,$4 WHERE EXISTS (
+                `INSERT INTO lms_passback_jobs(course_id,student_id)
+         SELECT $1,$2 WHERE EXISTS (
            SELECT 1 FROM courses c WHERE c.id=$1 AND c.ags_lineitem_url IS NOT NULL
          ) AND EXISTS (
            SELECT 1 FROM course_memberships cm WHERE cm.course_id=$1 AND cm.user_id=$2
              AND cm.lti_user_lineitem_sub IS NOT NULL
-         )`, [course_id,student_id,node_id,nextState.p_mastery],
+         )
+         ON CONFLICT (course_id,student_id) WHERE status IN ('pending','failed')
+         DO UPDATE SET status='pending',attempts=0,next_attempt_at=now(),updated_at=now()`, [course_id,student_id],
             );
             const response: TurnResult = { state: nextState, scaffold_level: scaffold.scaffold_level, message: scaffold.message, alert };
             await client.query(

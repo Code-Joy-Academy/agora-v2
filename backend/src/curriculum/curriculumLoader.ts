@@ -6,19 +6,21 @@ import type { CurriculumPack } from './types.js';
 
 export const AVAILABLE_PACKS: CurriculumPack[] = [cambridgeStage8English, cambridgeStage9Math];
 
+export const isKnownPack = (packId: unknown): packId is string => AVAILABLE_PACKS.some((p) => p.pack_id === packId);
+
 export async function loadPack(pack: CurriculumPack) {
   for (const node of pack.nodes) {
     const exists = await pool.query('SELECT id FROM curriculum_nodes WHERE id = $1', [node.id]);
     if (exists.rows[0]) continue;
 
     await pool.query(
-      `INSERT INTO curriculum_nodes (id, pack_id, strand, title, description, sample_passage, order_index)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [node.id, pack.pack_id, node.strand, node.title, node.description, node.sample_passage, node.order_index]
+        `INSERT INTO curriculum_nodes (id, pack_id, strand, title, description, sample_passage, order_index)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [node.id, pack.pack_id, node.strand, node.title, node.description, node.sample_passage, node.order_index]
     );
     await pool.query(
-      `INSERT INTO node_questions (id, node_id, prompt, misconception_triggers) VALUES ($1, $2, $3, $4)`,
-      [randomUUID(), node.id, node.question, JSON.stringify(node.misconception_triggers)]
+        `INSERT INTO node_questions (id, node_id, prompt, misconception_triggers) VALUES ($1, $2, $3, $4)`,
+        [randomUUID(), node.id, node.question, JSON.stringify(node.misconception_triggers)]
     );
   }
 }
